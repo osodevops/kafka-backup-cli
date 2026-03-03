@@ -1,0 +1,44 @@
+# Alacritty profile for kafka-backup-monitor screen recording
+# Usage: alacritty --config-file assets/terminal-profiles/alacritty.toml
+
+[window]
+padding = { x = 20, y = 20 }
+decorations = "None"
+opacity = 1.0
+dimensions = { columns = 120, lines = 40 }
+
+[font]
+normal = { family = "JetBrains Mono", style = "Regular" }
+size = 16.0
+
+[colors.primary]
+background = "#0F172A"
+foreground = "#F8FAFC"
+
+[colors.cursor]
+text = "#0F172A"
+cursor = "#F8FAFC"
+
+[colors.selection]
+text = "#F8FAFC"
+background = "#334155"
+
+[colors.normal]
+black   = "#0F172A"
+red     = "#EF4444"
+green   = "#10B981"
+yellow  = "#F59E0B"
+blue    = "#2563EB"
+magenta = "#8B5CF6"
+cyan    = "#06B6D4"
+white   = "#F8FAFC"
+
+[colors.bright]
+black   = "#64748B"
+red     = "#EF4444"
+green   = "#10B981"
+yellow  = "#F59E0B"
+blue    = "#38BDF8"
+magenta = "#8B5CF6"
+cyan    = "#06B6D4"
+white   = "#F8FAFC"

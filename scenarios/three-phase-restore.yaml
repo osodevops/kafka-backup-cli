@@ -1,0 +1,105 @@
+name: "Three-Phase Restore Showcase"
+description: "Highlights the three-phase restore process in detail"
+
+cluster:
+  name: "recovery-cluster"
+  brokers: 5
+
+backup:
+  id: "three-phase-demo"
+  storage: "s3://oso-kafka-backups/enterprise/"
+  compression: "zstd"
+
+topics:
+  - name: "transactions"
+    partitions: 4
+    total_records: [500000, 485000, 510000, 495000]
+  - name: "audit-log"
+    partitions: 2
+    total_records: [1200000, 1180000]
+  - name: "user-events"
+    partitions: 4
+    total_records: [320000, 315000, 330000, 325000]
+
+scenes:
+  - name: "intro"
+    duration_ms: 2000
+    effect: "fade_from_black"
+    actions:
+      - type: set_phase
+        phase: "RESTORE"
+      - type: switch_pipeline
+        mode: "restore"
+      - type: log
+        message: "Enterprise three-phase restore initiated"
+        level: "INFO"
+      - type: log
+        message: "Source: s3://oso-kafka-backups/enterprise/"
+        level: "INFO"
+
+  - name: "phase1_headers"
+    duration_ms: 5000
+    actions:
+      - type: set_three_phase
+        active_phase: 1
+      - type: pipeline_stage
+        active: "read"
+      - type: log_stream
+        messages:
+          - { delay: 500, message: "Phase 1: Collecting offset headers", level: "INFO" }
+          - { delay: 1500, message: "Reading manifest: transactions (4 partitions)", level: "INFO" }
+          - { delay: 2500, message: "Reading manifest: audit-log (2 partitions)", level: "INFO" }
+          - { delay: 3500, message: "Reading manifest: user-events (4 partitions)", level: "INFO" }
+          - { delay: 4500, message: "Phase 1 complete: 10 partition mappings collected", level: "INFO" }
+
+  - name: "phase2_restore"
+    duration_ms: 20000
+    actions:
+      - type: set_three_phase
+        active_phase: 2
+      - type: animate_partitions
+        target_progress: 1.0
+        throughput_range: [75, 130]
+        stagger_completion: true
+        throughput_variance: 0.15
+      - type: pipeline_stage_sequence
+        stages: ["decompress", "pitr filter", "produce"]
+      - type: update_summary
+        compression_ratio: 4.2
+      - type: log_stream
+        messages:
+          - { delay: 1000, message: "Phase 2: Restoring data to recovery cluster", level: "INFO" }
+          - { delay: 3000, message: "Decompressing zstd segments", level: "INFO" }
+          - { delay: 6000, message: "transactions:0 restored — 500,000 records", level: "INFO" }
+          - { delay: 9000, message: "user-events:2 restored — 330,000 records", level: "INFO" }
+          - { delay: 12000, message: "audit-log:0 restored — 1,200,000 records", level: "INFO" }
+          - { delay: 15000, message: "Remaining: 3 partitions", level: "INFO" }
+          - { delay: 18000, message: "All 10 partitions restored successfully", level: "INFO" }
+
+  - name: "phase3_offsets"
+    duration_ms: 4000
+    actions:
+      - type: set_three_phase
+        active_phase: 3
+      - type: log_stream
+        messages:
+          - { delay: 500, message: "Phase 3: Resetting consumer group offsets", level: "INFO" }
+          - { delay: 1500, message: "Resetting: order-processor (4 partitions)", level: "INFO" }
+          - { delay: 2500, message: "Resetting: audit-writer (2 partitions)", level: "INFO" }
+          - { delay: 3500, message: "All consumer groups reset and verified", level: "INFO" }
+
+  - name: "complete"
+    duration_ms: 4000
+    effect: "celebration"
+    actions:
+      - type: set_phase
+        phase: "RECOVERED"
+      - type: log
+        message: "Three-phase restore complete: 5,660,000 records recovered"
+        level: "INFO"
+      - type: log
+        message: "Zero data loss. Recovery time: 31.0s"
+        level: "INFO"
+      - type: show_cta
+        text: "github.com/osodevops/kafka-backup"
+        effect: "coalesce"

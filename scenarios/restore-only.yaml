@@ -1,0 +1,91 @@
+name: "Restore Monitoring Demo"
+description: "Demonstrates restore monitoring with three-phase restore"
+
+cluster:
+  name: "dr-kafka"
+  brokers: 3
+
+backup:
+  id: "restore-job-042"
+  storage: "s3://oso-kafka-backups/prod/"
+  compression: "zstd"
+
+topics:
+  - name: "orders"
+    partitions: 3
+    total_records: [150234, 148891, 152456]
+  - name: "payments"
+    partitions: 2
+    total_records: [78234, 81023]
+  - name: "events"
+    partitions: 3
+    total_records: [234567, 228901, 241234]
+
+scenes:
+  - name: "intro"
+    duration_ms: 2000
+    effect: "fade_from_black"
+    actions:
+      - type: set_phase
+        phase: "RESTORE"
+      - type: switch_pipeline
+        mode: "restore"
+      - type: log
+        message: "Starting restore from s3://oso-kafka-backups/prod/"
+        level: "INFO"
+
+  - name: "phase1"
+    duration_ms: 4000
+    actions:
+      - type: set_three_phase
+        active_phase: 1
+      - type: pipeline_stage
+        active: "read"
+      - type: log_stream
+        messages:
+          - { delay: 500, message: "Phase 1: Collecting offset headers...", level: "INFO" }
+          - { delay: 2000, message: "Reading segment manifests (156 segments)", level: "INFO" }
+          - { delay: 3500, message: "Phase 1 complete: 8 partition mappings", level: "INFO" }
+
+  - name: "phase2"
+    duration_ms: 18000
+    actions:
+      - type: set_three_phase
+        active_phase: 2
+      - type: animate_partitions
+        target_progress: 1.0
+        throughput_range: [80, 125]
+        stagger_completion: true
+      - type: pipeline_stage_sequence
+        stages: ["decompress", "pitr filter", "produce"]
+      - type: log_stream
+        messages:
+          - { delay: 1000, message: "Phase 2: Restoring data...", level: "INFO" }
+          - { delay: 4000, message: "Decompressing segments (zstd)", level: "INFO" }
+          - { delay: 7000, message: "events:0 restored — 234,567 records", level: "INFO" }
+          - { delay: 10000, message: "orders:2 restored — 152,456 records", level: "INFO" }
+          - { delay: 14000, message: "payments:1 restored — 81,023 records", level: "INFO" }
+          - { delay: 16000, message: "All partitions restored", level: "INFO" }
+
+  - name: "phase3"
+    duration_ms: 3000
+    actions:
+      - type: set_three_phase
+        active_phase: 3
+      - type: log_stream
+        messages:
+          - { delay: 500, message: "Phase 3: Resetting consumer group offsets...", level: "INFO" }
+          - { delay: 2000, message: "Reset 3 consumer groups across 8 partitions", level: "INFO" }
+
+  - name: "complete"
+    duration_ms: 3000
+    effect: "celebration"
+    actions:
+      - type: set_phase
+        phase: "RECOVERED"
+      - type: log
+        message: "Restore complete: 1,315,540 records recovered"
+        level: "INFO"
+      - type: log
+        message: "Zero data loss confirmed"
+        level: "INFO"

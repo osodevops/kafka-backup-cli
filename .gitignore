@@ -1,0 +1,21 @@
+# Build artifacts
+/target/
+**/*.rs.bk
+
+# Generated recordings
+/recordings/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# macOS
+.DS_Store
+
+# Claude Code
+.claude/
+
+# Logs
+*.log

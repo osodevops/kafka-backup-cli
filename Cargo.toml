@@ -1,0 +1,27 @@
+[package]
+name = "kafka-backup-monitor"
+version = "0.1.0"
+edition = "2021"
+description = "Real-time TUI dashboard for kafka-backup backup/restore monitoring"
+license = "MIT"
+
+[[bin]]
+name = "kafka-backup-monitor"
+path = "src/main.rs"
+
+[dependencies]
+ratatui = "0.30"
+crossterm = "0.28"
+tachyonfx = { version = "0.23", features = ["std-duration"] }
+tokio = { version = "1", features = ["rt-multi-thread", "time", "fs", "io-util", "macros"] }
+clap = { version = "4", features = ["derive"] }
+serde = { version = "1", features = ["derive"] }
+serde_yaml = "0.9"
+chrono = { version = "0.4", features = ["serde"] }
+rand = { version = "0.8", features = ["small_rng"] }
+color-eyre = "0.6"
+
+[profile.release]
+strip = true
+lto = true
+codegen-units = 1

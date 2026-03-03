@@ -1,0 +1,97 @@
+name: "Point-in-Time Recovery Demo"
+description: "Demonstrates PITR recovery with time window filtering"
+
+cluster:
+  name: "prod-kafka"
+  brokers: 3
+
+backup:
+  id: "pitr-recovery-001"
+  storage: "s3://oso-kafka-backups/prod/"
+  compression: "zstd"
+
+topics:
+  - name: "orders"
+    partitions: 3
+    total_records: [45000, 42000, 48000]
+  - name: "payments"
+    partitions: 2
+    total_records: [23000, 25000]
+
+scenes:
+  - name: "intro"
+    duration_ms: 2000
+    effect: "fade_from_black"
+    actions:
+      - type: set_phase
+        phase: "RESTORE"
+      - type: switch_pipeline
+        mode: "restore"
+      - type: log
+        message: "PITR recovery: restoring to 2024-12-01T09:30:00Z"
+        level: "INFO"
+      - type: log
+        message: "Window: 2024-12-01T08:00:00Z — 2024-12-01T10:00:00Z"
+        level: "INFO"
+
+  - name: "phase1"
+    duration_ms: 3000
+    actions:
+      - type: set_three_phase
+        active_phase: 1
+      - type: pipeline_stage
+        active: "read"
+      - type: log_stream
+        messages:
+          - { delay: 500, message: "Phase 1: Scanning segment headers for time range", level: "INFO" }
+          - { delay: 1500, message: "Identified 47 segments within PITR window", level: "INFO" }
+          - { delay: 2500, message: "Phase 1 complete: 5 partitions mapped", level: "INFO" }
+
+  - name: "phase2_pitr"
+    duration_ms: 12000
+    actions:
+      - type: set_three_phase
+        active_phase: 2
+      - type: animate_partitions
+        target_progress: 1.0
+        throughput_range: [60, 95]
+        stagger_completion: true
+        throughput_variance: 0.1
+      - type: pipeline_stage_sequence
+        stages: ["decompress", "pitr filter", "produce"]
+      - type: update_summary
+        compression_ratio: 3.2
+      - type: log_stream
+        messages:
+          - { delay: 1000, message: "Phase 2: PITR filter active — trimming to target timestamp", level: "INFO" }
+          - { delay: 3000, message: "Filtering: 183,000 total → ~135,000 within window", level: "INFO" }
+          - { delay: 5000, message: "orders:0 PITR filtered — 45,000 → 33,750 records", level: "INFO" }
+          - { delay: 7000, message: "payments:1 PITR filtered — 25,000 → 18,750 records", level: "INFO" }
+          - { delay: 9000, message: "Producing filtered records to new cluster", level: "INFO" }
+          - { delay: 11000, message: "All partitions restored with PITR filtering", level: "INFO" }
+
+  - name: "phase3"
+    duration_ms: 2000
+    actions:
+      - type: set_three_phase
+        active_phase: 3
+      - type: log_stream
+        messages:
+          - { delay: 500, message: "Phase 3: Resetting offsets to PITR boundary", level: "INFO" }
+          - { delay: 1500, message: "Offsets aligned to 2024-12-01T09:30:00Z", level: "INFO" }
+
+  - name: "complete"
+    duration_ms: 4000
+    effect: "celebration"
+    actions:
+      - type: set_phase
+        phase: "RECOVERED"
+      - type: log
+        message: "PITR recovery complete: 135,000 records restored to exact point-in-time"
+        level: "INFO"
+      - type: log
+        message: "Target: 2024-12-01T09:30:00Z | Recovery time: 19.0s"
+        level: "INFO"
+      - type: show_cta
+        text: "github.com/osodevops/kafka-backup"
+        effect: "coalesce"

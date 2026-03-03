@@ -1,0 +1,201 @@
+name: "Full Backup & Restore Demo"
+description: "Demonstrates backup of 3 topics, simulated disaster, and three-phase restore"
+terminal_size:
+  width: 120
+  height: 40
+
+cluster:
+  name: "prod-kafka"
+  brokers: 3
+
+backup:
+  id: "production-backup-001"
+  storage: "s3://oso-kafka-backups/prod/"
+  compression: "zstd"
+
+topics:
+  - name: "orders"
+    partitions: 3
+    total_records: [150234, 148891, 152456]
+  - name: "payments"
+    partitions: 2
+    total_records: [78234, 81023]
+  - name: "events"
+    partitions: 3
+    total_records: [234567, 228901, 241234]
+
+scenes:
+  - name: "intro"
+    duration_ms: 3000
+    effect: "fade_from_black"
+    actions:
+      - type: show_header
+        text: "kafka-backup monitor"
+
+  - name: "backup_start"
+    duration_ms: 2000
+    effect: "slide_in_pipeline"
+    actions:
+      - type: set_phase
+        phase: "BACKUP"
+      - type: log
+        message: "Starting backup: production-backup-001"
+        level: "INFO"
+      - type: pipeline_stage
+        active: "kafka"
+
+  - name: "backup_consume"
+    duration_ms: 8000
+    actions:
+      - type: animate_partitions
+        target_progress: 0.5
+        throughput_range: [95, 142]
+        throughput_variance: 0.15
+      - type: pipeline_stage
+        active: "consume"
+      - type: log_stream
+        messages:
+          - { delay: 500, message: "Connected to Kafka cluster (3 brokers)", level: "INFO" }
+          - { delay: 1500, message: "Discovering partitions for 3 topics...", level: "INFO" }
+          - { delay: 2500, message: "Backing up: orders (3), payments (2), events (3)", level: "INFO" }
+          - { delay: 4000, message: "Segment 12/156 written to S3", level: "INFO" }
+          - { delay: 5500, message: "orders:1 checkpoint saved at offset 74,445", level: "INFO" }
+          - { delay: 7000, message: "payments:0 segment complete", level: "INFO" }
+
+  - name: "backup_compress_store"
+    duration_ms: 12000
+    actions:
+      - type: animate_partitions
+        target_progress: 1.0
+        throughput_range: [100, 145]
+        stagger_completion: true
+      - type: pipeline_stage_sequence
+        stages: ["compress", "store"]
+        transition_at: 0.5
+      - type: update_summary
+        compression_ratio: 3.8
+      - type: log_stream
+        messages:
+          - { delay: 1000, message: "Compressing batch 24 (zstd level 3)", level: "INFO" }
+          - { delay: 2500, message: "events:0 reached 100% — 234,567 records", level: "INFO" }
+          - { delay: 4000, message: "orders:1 reached 100% — 148,891 records", level: "INFO" }
+          - { delay: 5500, message: "Segment 89/156 written", level: "INFO" }
+          - { delay: 7000, message: "payments:1 reached 100% — 81,023 records", level: "INFO" }
+          - { delay: 9000, message: "All partitions at 100% — finalising segments", level: "INFO" }
+          - { delay: 10500, message: "Segment 156/156 written", level: "INFO" }
+
+  - name: "backup_complete"
+    duration_ms: 3000
+    effect: "celebration"
+    actions:
+      - type: set_phase
+        phase: "COMPLETE"
+      - type: pipeline_stage
+        active: "done"
+      - type: log
+        message: "Backup completed: 1,315,540 records, 1.3 GB → 341 MB (3.8:1)"
+        level: "INFO"
+      - type: log
+        message: "Duration: 22.4s | Avg throughput: 127 MB/s"
+        level: "INFO"
+
+  - name: "disaster_pause"
+    duration_ms: 2000
+    effect: "dim_screen"
+    actions:
+      - type: log
+        message: "────── Simulating cluster failure... ──────"
+        level: "WARN"
+
+  - name: "disaster"
+    duration_ms: 3000
+    effect: "screen_shake_and_red"
+    actions:
+      - type: set_phase
+        phase: "ERROR"
+      - type: pipeline_error
+        stage: "kafka"
+        effect: "explode"
+      - type: reset_partitions
+        effect: "dissolve"
+      - type: log
+        message: "ERROR: Connection to broker-1:9092 lost"
+        level: "ERROR"
+      - type: log
+        message: "ERROR: Connection to broker-2:9092 lost"
+        level: "ERROR"
+      - type: log
+        message: "CRITICAL: All brokers unreachable"
+        level: "ERROR"
+
+  - name: "restore_start"
+    duration_ms: 2000
+    effect: "fade_to_restore_theme"
+    actions:
+      - type: set_phase
+        phase: "RESTORE"
+      - type: switch_pipeline
+        mode: "restore"
+      - type: log
+        message: "Starting three-phase restore from s3://oso-kafka-backups/prod/"
+        level: "INFO"
+
+  - name: "restore_phase1"
+    duration_ms: 4000
+    actions:
+      - type: set_three_phase
+        active_phase: 1
+      - type: pipeline_stage
+        active: "read"
+      - type: log_stream
+        messages:
+          - { delay: 500, message: "Phase 1: Collecting offset headers...", level: "INFO" }
+          - { delay: 2000, message: "Reading segment manifests from S3...", level: "INFO" }
+          - { delay: 3500, message: "Phase 1 complete: 8 partition mappings collected", level: "INFO" }
+
+  - name: "restore_phase2"
+    duration_ms: 15000
+    actions:
+      - type: set_three_phase
+        active_phase: 2
+      - type: animate_partitions
+        target_progress: 1.0
+        throughput_range: [85, 120]
+        stagger_completion: true
+      - type: pipeline_stage_sequence
+        stages: ["decompress", "pitr filter", "produce"]
+      - type: log_stream
+        messages:
+          - { delay: 1000, message: "Phase 2: Restoring data to new cluster...", level: "INFO" }
+          - { delay: 3000, message: "Decompressing segments (zstd)", level: "INFO" }
+          - { delay: 5000, message: "orders:0 restore progress: 50%", level: "INFO" }
+          - { delay: 8000, message: "events:2 restored — 241,234 records", level: "INFO" }
+          - { delay: 11000, message: "payments:0 restored — 78,234 records", level: "INFO" }
+          - { delay: 13000, message: "All partitions restored successfully", level: "INFO" }
+
+  - name: "restore_phase3"
+    duration_ms: 3000
+    actions:
+      - type: set_three_phase
+        active_phase: 3
+      - type: log_stream
+        messages:
+          - { delay: 500, message: "Phase 3: Resetting consumer group offsets...", level: "INFO" }
+          - { delay: 1500, message: "Reset 3 consumer groups across 8 partitions", level: "INFO" }
+          - { delay: 2500, message: "Consumer group offsets verified", level: "INFO" }
+
+  - name: "restore_complete"
+    duration_ms: 5000
+    effect: "celebration"
+    actions:
+      - type: set_phase
+        phase: "RECOVERED"
+      - type: log
+        message: "Three-phase restore complete: 1,315,540 records recovered"
+        level: "INFO"
+      - type: log
+        message: "Zero data loss. Total recovery duration: 47.2s"
+        level: "INFO"
+      - type: show_cta
+        text: "github.com/osodevops/kafka-backup"
+        effect: "coalesce"
